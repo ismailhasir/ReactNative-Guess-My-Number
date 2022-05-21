@@ -1,4 +1,3 @@
-
 public final class ModuleRegistry: Sequence {
   public typealias Element = ModuleHolder
 
@@ -61,6 +60,10 @@ public final class ModuleRegistry: Sequence {
 
   public func get(moduleWithName moduleName: String) -> AnyModule? {
     return registry[moduleName]?.module
+  }
+
+  public func getModuleNames() -> [String] {
+    return Array(registry.keys)
   }
 
   public func makeIterator() -> IndexingIterator<[ModuleHolder]> {

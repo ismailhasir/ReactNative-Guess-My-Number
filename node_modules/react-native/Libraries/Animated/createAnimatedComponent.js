@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,6 +9,8 @@
  */
 
 'use strict';
+
+import * as createAnimatedComponentInjection from './createAnimatedComponentInjection';
 
 const View = require('../Components/View/View');
 const {AnimatedEvent} = require('./AnimatedEvent');
@@ -79,6 +81,11 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
     }
 
     _isFabric = (): boolean => {
+      // When called during the first render, `_component` is always null.
+      // Therefore, even if a component is rendered in Fabric, we can't detect
+      // that until ref is set, which happens sometime after the first render.
+      // In cases where this value switching between "false" and "true" on Fabric
+      // causes issues, add an additional check for _component nullity.
       if (this._component == null) {
         return false;
       }
@@ -161,17 +168,14 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
       }
     };
 
-    _attachProps(nextProps) {
+    _attachProps(nextProps: any) {
       const oldPropsAnimated = this._propsAnimated;
-
-      if (nextProps === oldPropsAnimated) {
-        return;
-      }
 
       this._propsAnimated = new AnimatedProps(
         nextProps,
         this._animatedPropsCallback,
       );
+      this._propsAnimated.__attach();
 
       // When you call detach, it removes the element from the parent list
       // of children. If it goes to 0, then the parent also detaches itself
@@ -192,19 +196,6 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
       setLocalRef: ref => {
         this._prevComponent = this._component;
         this._component = ref;
-
-        // TODO: Delete this in a future release.
-        if (ref != null && ref.getNode == null) {
-          ref.getNode = () => {
-            console.warn(
-              '%s: Calling `getNode()` on the ref of an Animated component ' +
-                'is no longer necessary. You can now directly use the ref ' +
-                'instead. This method will be removed in a future release.',
-              ref.constructor.name ?? '<<anonymous>>',
-            );
-            return ref;
-          };
-        }
       },
     });
 
@@ -213,23 +204,16 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
       const {style: passthruStyle = {}, ...passthruProps} =
         this.props.passthroughAnimatedPropExplicitValues || {};
       const mergedStyle = {...style, ...passthruStyle};
+
+      // Force `collapsable` to be false so that native view is not flattened.
+      // Flattened views cannot be accurately referenced by a native driver.
       return (
         <Component
           {...props}
           {...passthruProps}
+          collapsable={false}
           style={mergedStyle}
           ref={this._setComponentRef}
-          nativeID={
-            props.nativeID ??
-            (this._isFabric() ? 'animatedComponent' : undefined)
-          } /* TODO: T68258846. */
-          // The native driver updates views directly through the UI thread so we
-          // have to make sure the view doesn't get optimized away because it cannot
-          // go through the NativeViewHierarchyManager since it operates on the shadow
-          // thread.
-          collapsable={
-            this._propsAnimated.__isNative ? false : props.collapsable
-          }
         />
       );
     }
@@ -250,12 +234,12 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
       this._markUpdateComplete();
     }
 
-    UNSAFE_componentWillReceiveProps(newProps) {
+    UNSAFE_componentWillReceiveProps(newProps: any) {
       this._waitForUpdate();
       this._attachProps(newProps);
     }
 
-    componentDidUpdate(prevProps) {
+    componentDidUpdate(prevProps: any) {
       if (this._component !== this._prevComponent) {
         this._propsAnimated.setNativeView(this._component);
       }
@@ -270,6 +254,8 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
       this._propsAnimated && this._propsAnimated.__detach();
       this._detachNativeEvents();
       this._markUpdateComplete();
+      this._component = null;
+      this._prevComponent = null;
     }
   }
 
@@ -283,4 +269,6 @@ function createAnimatedComponent<Props: {+[string]: mixed, ...}, Instance>(
   });
 }
 
-module.exports = createAnimatedComponent;
+// $FlowIgnore[incompatible-cast] - Will be compatible after refactors.
+module.exports = (createAnimatedComponentInjection.recordAndRetrieve() ??
+  createAnimatedComponent: typeof createAnimatedComponent);

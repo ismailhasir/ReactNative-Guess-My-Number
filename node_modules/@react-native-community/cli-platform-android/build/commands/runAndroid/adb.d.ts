@@ -13,9 +13,14 @@ declare function getDevices(adbPath: string): Array<string>;
  * Gets available CPUs of devices from ADB
  */
 declare function getAvailableCPUs(adbPath: string, device: string): Array<string>;
+/**
+ * Gets the CPU architecture of a device from ADB
+ */
+declare function getCPU(adbPath: string, device: string): string | null;
 declare const _default: {
     getDevices: typeof getDevices;
     getAvailableCPUs: typeof getAvailableCPUs;
+    getCPU: typeof getCPU;
 };
 export default _default;
 //# sourceMappingURL=adb.d.ts.map
